@@ -1,43 +1,68 @@
 #include "cache.hpp"
 #include <iostream>
 #include <cmath>
+#include <cassert>
 
-Cache::Cache(size_t size_kb, size_t line_size) : hits(0), misses(0) {
-    size_t cache_size = size_kb * BYTES_PER_KB;
-    if (line_size == 0 || cache_size % line_size != 0) { throw std::invalid_argument("Invalid cache config");}
+Cache::Cache(size_t size_KB, size_t line_size, size_t associativity) : associativity(associativity), line_size(line_size) {
 
-    size_t num_lines = cache_size / line_size;
+    assert(size_KB > 0);
+    assert(line_size > 0);
+    assert(associativity > 0);
 
-    offset_bits = log2(line_size);
-    index_bits = log2(num_lines);
+    size_t cache_bytes = size_KB * BYTES_PER_KB;
 
-    lines.resize(num_lines); // hold exactly num_lines elements
-    for (auto &line : lines) {
-        line.valid = false;
-        line.tag = 0;
-    }   
+    assert(cache_bytes % (line_size * associativity) == 0);
+
+    num_sets = cache_bytes / (line_size * associativity);
+
+    assert((line_size & (line_size - 1)) == 0);
+    assert((num_sets & (num_sets - 1)) == 0);
+
+    offset_bits = static_cast<size_t>(std::log2(line_size));
+    index_bits = static_cast<size_t>(std::log2(num_sets));
+
+    sets.resize(num_sets);
+    for (auto &set : sets) {
+        set.resize(associativity);
+    }
 }
 
-bool Cache::access(u32 address) {
+bool Cache::access(addr_t address) {
     // extract index, tag from addr
-    u32 index = get_index(address);
-    u32 tag = get_tag(address);
+    addr_t index = (address >> offset_bits) & ((1ULL << index_bits) - 1);
+    addr_t tag = address >> (offset_bits + index_bits);
 
-    static int count = 0;
-    if (count++ < 10) {
-        std::cout << "Addr: 0x" << std::hex << address
-                << " Index: " << index << " Tag: 0x" << tag << std::dec << std::endl;
+    assert(index < num_sets);
+
+    auto &set = sets[index];
+
+    for (auto &line : set) {
+        if (line.valid && line.tag == tag) {
+            hits++;
+            return true;
+        }
     }
 
-    if (lines[index].valid && lines[index].tag == tag) {
-        hits++;
-        return true;
-    } else {
-        misses++;
-        lines[index].valid = true;
-        lines[index].tag = tag;
-        return false;
+    // handle miss
+    misses++;
+    int victim = -1;
+
+    for (size_t i{0}; i < set.size(); i++){
+        if (!set[i].valid) {
+            victim = i;
+            break;
+        }
     }
+
+    if (victim == -1) {
+        victim = 0;
+    }
+
+    set[victim].valid = true;
+    set[victim].tag = tag;
+
+    return false;
+
 }
 
 void Cache::print_stats() {

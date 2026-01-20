@@ -3,38 +3,36 @@
 #include <vector>
 #include <cstdint>
 
-typedef uint32_t u32;
-typedef uint64_t u64;
+using u32 = uint32_t;
+using u64 = uint64_t;
+using addr_t = u64;
+
+static constexpr size_t BYTES_PER_KB = 1024;
+static constexpr size_t BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB;
+
 
 struct CacheLine {
-    bool valid;
-    u32 tag;
+    bool valid{false};
+    addr_t tag{0};
+    u64 meta{0}; // Later: uint8: RRIP, uint16 for LRU
 };
 
 class Cache {
 private:
-    std::vector<CacheLine> lines;
     size_t num_sets;
+    size_t associativity;
+    size_t line_size;
+    
     size_t offset_bits;
     size_t index_bits;
 
-    u32 hits;  
-    u32 misses;
+    size_t hits{0};
+    size_t misses{0};
 
-    static constexpr size_t BYTES_PER_KB = 1024;
-    static constexpr size_t BYTES_PER_MB = BYTES_PER_KB * BYTES_PER_KB;
-
-    u32 get_index(u32 address) const {
-        return (address >> offset_bits) & ((1UL << index_bits) - 1);
-    }
-
-    u32 get_tag(u32 address) const {
-        return address >> (offset_bits + index_bits);
-    }
-
+    std::vector<std::vector<CacheLine>> sets;
 
 public:
-    Cache(size_t size_kb, size_t line_size);
-    bool access(u32 address);
+    Cache(size_t size_KB, size_t line_size, size_t associativity);
+    bool access(addr_t address);
     void print_stats();
 };
