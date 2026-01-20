@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    Cache cache(32, 64);
+    Cache cache(4, 64, 1); // 4KB, 64B lines, 4-way
 
     std::ifstream trace(argv[1]);
     if (!trace) {
